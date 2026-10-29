@@ -1,0 +1,7 @@
+En regardant les permissions du binaire présent sur le home de la session level0, je peux y trouver un binaire appartenant au level1 avec une permission s pour le user qui fera que le fichier s’exécutera avec les droits de son proprio qui n’est autre que level1. level1 est la session dont je souhaite obtenir son mdp pour me connecter dessus.
+
+J’ai désassemblé le binaire avec objdump -d level0 | less, lu le main, repéré le cmp $0x1a7 et converti 0x1a7 en 423.
+
+En analysant le binaire je peux comprendre que le programme convertit argv[1] en entier avec atoi, puis le compare à 423. Si le nombre est différent alors un message avec no s’affiche, sinon le programme ouvre un terminal s’exécutant avec les droits du level1, donc on peut ouvrir le fichier .pass de la session level1 pour obtenir le mdp de cette session.
+
+Une fois le mdp récupéré on utilise la commande su level1 pour se connecter avec le mdp, et nous voilà connectés en tant que level1.

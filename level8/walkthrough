@@ -1,0 +1,29 @@
+Le binaire level8 possede les droits setuid de level9.
+
+Le main boucle a l'infini il affiche l'adresse de 2 variables global auth et service.
+Puis avec fgets attend que l'utilisateur rentre quelque chose . Le programme compare ensuite l'entree pour executer une des 4 commande suivante :
+- auth -> alloue 4 octets avec malloc(4) et copie la suite du buffer dedans avec strcpy() (longeur max 30 octets)
+- reset -> libere la memoire pointer par auth (free())
+- service -> alloue une nouvelle zone memoir avec strdup a partir de la suite du buffer et stock le resultat dans la variable service.
+- login -> va lire, à l’adresse auth + 0x20 (32 octets après le debut de la zone allouee pour auth), les 4 octets qui s’y trouvent. Si ces 4 octets ne sont pas tous nuls, le programme lance un shell avec system("/bin/sh"). Sinon, il affiche simplement “Password:”.
+
+Notre objectif est du coup d'utiliser ces fonction a disposition pour valider le if et afficher le shell.
+
+En testant les commandes on observe que auth et service ce trouve a la suite sur la heap, a une distance de 0x10 (16 octets):
+    auth AAAA        -> auth = 0x804a008
+    service ...      -> service = 0x804a018   (= auth + 0x10)
+Or le check de login lit auth + 0x20. Comme service est auth + 0x10, l'adresse lue par login tombe a l'interieur meme de la zone alloue par service (zone dont on controle le contenue).
+Il suffit alors d'envoyer une chaine pour service suffisament longue pour que l;un de ces octets atteigne cette position, sans y laisser de 0.
+
+En theorie en ce basant sur l'ecart entre les 2 adresse 0x10 il faudrait atteindre l'index 16 donc une chaine d'au moins 17 caractere. En testant directment sur le binaire on se rend compte que 15 suffisent :
+14 x 'A' -> login affiche "Password:"
+15 x 'A' -> login lance un shell
+Ecart du au fonctionnement propre de malloc qui alloue la memoire .
+
+Au final pour extraire le flag on fait:
+auth AAAA
+service AAAAAAAAAAAAAAA
+login
+cat /home/user/level9/.pass
+
+Le shell obtenu via system("/bin/sh") herite des droits du binaire grqce au bit setuid : level8 tourne avec les droits de level9, ce qui permet de lire le fichier .pass de level9 normalement inaccessible à l’utilisateur level8.

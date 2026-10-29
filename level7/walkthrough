@@ -1,0 +1,28 @@
+Pour ce level, il faut effectuer un heap overflow pour obtenir le mot de passe du niveau suivant.
+
+Le programme alloue 4 fois 8 octets sur la heap avec malloc. Les zones A et C servent de structures : 4 octets pour un nombre (1 ou 2), puis 4 octets pour un pointeur vers une autre zone (B pour A, D pour C).
+
+Une fois les malloc effectués, le programme fait deux strcpy : argv[1] est copié dans B (pointé par A), et argv[2] dans D (pointé par C). Comme strcpy ne vérifie pas la taille et que B ne fait que 8 octets, on peut déborder.
+
+Rappel GOT : la GOT (Global Offset Table) est une table interne au binaire contenant une case par fonction externe (puts, strcpy, fopen...). Chaque case stocke l’adresse réelle de la fonction. Quand le programme fait call puts, il lit cette case pour savoir où sauter.
+
+Exploitation : avec argv[1], on déborde depuis B jusqu’au pointeur situé en C+4 (celui qui pointe vers D). On le remplace par l’adresse de la case GOT de puts (0x08049928). Ainsi, le second strcpy n’écrit plus dans D, mais dans la case GOT de puts.
+
+argv[2] contient l’adresse de la fonction m (0x080484f4), présente dans le binaire mais jamais appelée. Elle est donc écrite dans la case GOT de puts. Résultat : quand le programme fait call puts, il saute dans m au lieu de puts. La fonction m affiche le contenu du buffer, où fopen + fgets ont déjà chargé le .pass de level8.
+
+Recherche du décalage avec gdb :
+
+gdb --args ./level7 AAAABBBBCCCCDDDDEEEEFFFFGGGG 2222
+(gdb) break *0x80485bd					# juste avant le 2e strcpy
+(gdb) run
+(gdb) x/x $esp: 0xbffff6f0:	0x46464646	# affiche la destination du 2e strcpy
+
+La destination affichée correspondait aux octets “FFFF” de notre motif, soit la position 20. Le pointeur C+4 est donc atteint après 20 octets (8 pour B + 8 de métadonnées malloc + 4 pour le champ valeur de C).
+
+Commande finale :
+
+./level7 $(python -c 'print "A"*20 + "\x28\x99\x04\x08"') $(python -c 'print "\xf4\x84\x04\x08"')
+argv[1] : 20 octets de bourrage + l’adresse de la case GOT de puts (little-endian)
+argv[2] : l’adresse de la fonction m (little-endian)
+
+Le mot de passe de level8 s’affiche (suivi d’un timestamp via time(), sans importance).

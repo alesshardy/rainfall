@@ -1,0 +1,14 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int	main(int argc, char **argv) {
+	if (atoi(argv[1]) != 423) {
+		write(2, "no\n", 3);
+		return 0;
+	}
+	else {
+		char *args[] = {"/bin/sh", NULL};
+		execv("/bin/sh", args);
+	}
+}

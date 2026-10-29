@@ -1,0 +1,27 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+typedef void (*func_ptr)(void);
+
+void n(void) {
+    system("/bin/cat /home/user/level7/.pass");
+    return ;
+}
+
+void m(void) {
+    puts("Nope");
+    return;
+}
+
+int main(int argc,char **argv) {
+    char *arg;
+    func_ptr *fct;
+
+    arg = malloc(64);
+    fct = malloc(4);
+    *fct = m;
+    strcpy(arg, argv[1]);
+    (*fct)() ;
+    return (0);
+}

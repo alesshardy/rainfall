@@ -1,0 +1,19 @@
+Pour ce level, la fonction main appelle une fonction n qui appelle exit pour quitter le programme. Mais n utilise aussi printf juste avant exit, en passant directement en argument le buffer reçu de l’entrée standard via fgets.
+
+Comme l’argument de printf n’est pas formaté, on peut contrôler le format. Le but est d’écrire l’adresse de la fonction o (une fonction présente dans le binaire, qui exécute un shell avec les droits de level6) à la place de l’adresse de la fonction exit dans la GOT.
+
+La GOT (Global Offset Table) est une table interne au binaire qui contient une case par fonction externe (comme exit). Chaque case stocke l’adresse réelle de la fonction, résolue à l’exécution. Quand le programme fait call exit, il lit cette case pour savoir où sauter. En remplaçant le contenu de la case d’exit par l’adresse de o, on détourne call exit vers o.
+
+Pour trouver à quelle position notre buffer se trouve sur la pile du point de vue de printf, on teste d’abord avec une commande du type AAAA %x %x %x %x %x : on repère à quelle position apparaît 41414141 (nos “AAAA”). Ici le buffer commence à la position 4.
+
+python -c 'print "\x38\x98\x04\x08\x3a\x98\x04\x08" + "%2044x" + "%5$hn" + "%31904x" + "%4$hn"' > /tmp/exploit
+
+Dans le buffer, on place deux adresses cibles : la case GOT d’exit (0x08049838, position 4) et cette même case décalée de 2 octets (0x0804983a, position 5). On écrit l’adresse de o en deux moitiés de 2 octets avec %hn, car l’écrire d’un coup sur 4 octets demanderait d’afficher beaucoup trop de caractères.
+
+Les %x servent à gonfler le compteur de caractères affichés par printf. %5$hn écrit à la position 5 (case GOT + 2) la moitié haute de l’adresse de o ; puis on augmente encore le compteur et %4$hn écrit à la position 4 (case GOT) la moitié basse. Les deux moitiés réunies reforment l’adresse complète de o. On écrit la plus petite valeur en premier car le compteur de printf ne peut qu’augmenter.
+
+On range ce payload dans un fichier dans /tmp.
+
+cat /tmp/exploit - | ./level5
+
+Cette commande envoie le payload au binaire puis ouvre le shell de level6 (le - garde l’entrée ouverte pour taper dedans). On passe par python car on ne peut pas saisir les 4 octets bruts d’une adresse au clavier, et on écrit chaque adresse en little-endian (\x38\x98\x04\x08) car le processeur range les octets du poids faible au poids fort.

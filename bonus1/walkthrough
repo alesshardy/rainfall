@@ -1,0 +1,19 @@
+Le programme prend 2 arguments av[1] converti en entier via atoi() et stocke dans une variable nb (type int) et av[2] une chaine de caractere.
+Apres si il verifie que si nb < 10 -> le programme fait memcpy(buffer, av[2], nb * 4) ou buffer un char[] de 40 octets.
+Il verifie ensuite si nb == 1464814662 (0x574f4c46) si c'est le cas cela appel un shell et vue que le binaire a les droit setuid de bonus2 on pourra recuperer le .pass
+
+La faille se joue sur le fait que nb est un entier signee mais que memcpy utilise size_t non signe.
+Du coup on peux passer le premier if en mettant un nombre negatif qui sera reinterprete en non signe par memcpy (size_t). Et donc de malgres le if depasser la taille du buffer pour atteindre la ou est stocker nb et le modifier avec le second argument pour  rentrer dans le if nb == 1464814662.
+
+Via objdump on vois que buffer est situe a esp+0x14 et nb stocke a esp+0x3c donc ecart: 0x3c - 0x14 = 0x28 (40 octets). Pile la taille du buffer nb ce trouve donc juste apres en memoire et un overflow dans memcpy permet de l'ecraser.
+
+Calcul de la valeur de nb a fournir :
+il faut que nb * 4 une fois tronque sur 32bits donne exactement 44 (40 octcets buffer + 4 octets pour ecraser nb). 
+nb * 4 = 44(% 2^32) -> on obtient -1073741813
+
+Le memcpy copie 44 octets de av[2] dans le buffer. Les 40 premiers servent juste de bourrage ; les 4 derniers viennent ecraser nb directement. On y place le texte "FLOW", dont les octets ASCII ('F'=0x46, 'L'=0x4c, 'O'=0x4f, 'W'=0x57) correspondent exactement, en little-endian, à la valeur attendue 0x574f4c46
+
+Exploit final du coup :
+./bonus1 -1073741813 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLOW
+whoami
+cat /home/user/bonus2/.pass

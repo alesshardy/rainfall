@@ -1,0 +1,20 @@
+Le binaire level4 possede les droits setuid de level5. La fonction n() lit l'entree standard aved fgets(buufer, 0x200, stdin) -> taille limite pas d'overflow possible ici.
+
+Apres n() appel p(buffer), qui fait printf(buffer) sans second argument -> le contenu taper par l'utilisateur sert directement de format a printf. C'est une faille de type format string: chaque %x/%d place dams l'entree va faire pioche printf dans la stack a des positions qui n'ont pas ete prevues comme arguments.
+
+Juste apres l'appel a p(), le programme compare une variable globale m a l'adresse 0x08049810 (trouver via objdump a la valeur 0x1025544).
+Si elles sont egales, un shell est ouvert avec les droits level5 (system("/bin/cat /home/user/level5/.pass")).
+
+L'objectif est donc d'utiliser la faille format string pour ecrire la valeur 0x1025544 a l'adresse de m, grace au specificateur %n (qui ecrit a l'adressse fournie en argument le nombre de caractere deja affiches par printf).
+
+1. trouver la position de son propre buffer parmi les arguments de printf:
+En envoyant AAAA.%x.%x.%x.... on observe a qu'elle postion 41414141 (AAAA en hexa) apparait dans la sortie (ici en 12 eme). Cette position sert ensuite la syntaxe positionnel %12$n
+
+2. Calculer le padding necessaire 0x1025544 converti en decimal = 16 930 116. En placant l'adresse m (4 octet) en tout debut de payload (compte deja dans le total afficher par printf).
+Il reste donc a afficher 16 930 116 - 4 = 16 930 112 caractere de padding obtenu avec la largeur de champs %16930112d, avant d'utiliser %12$n pour ecrire ce total a l'adresse fournie en position 12 (l'adresse de m).
+
+Commande:
+python -c 'print "\x10\x98\x04\x08" + "%16930112d%12$n"' > /tmp/exploit
+cat /tmp/exploit | ./level4
+
+L'adresse \x10\x98\x04\x08 est celle d m en little-endian. Une fois execute m vaut 0x1025544, le if est valide et un shell s'ouvre avec le .pass deja afficher (cat dans le binaire).

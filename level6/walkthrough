@@ -1,0 +1,24 @@
+Le binaire level6 possede les droits setuid de level7. Ici entree utilisateur pas lue via stdin (gets/fgets) mais directement passee en arguments (argv[1]).
+
+Le main effectue 2 allocations sur la heap avec malloc()
+1. un buffer de 64 octets
+2. un pointeur de fonction de 4 octets initiailiser avec l'adresse de la fonction m()
+La fonction m() affiche "Nope" et retourne.
+Ensuite strcpy(buffer, argv[1]) copie l'arg fournis par l'utilisateuer dans le buffer de 64octet sans verifier sa taille.
+Enfin le programme appella la fonction dont l'adresse se trouve dans le pointeur de fonction(call eax)
+
+Le binaire contient aussi une fonction n() qui appelle system("/bin/cat /home/user/level7/.pass") mais cette fonction n'est jamais appelée dans le code.
+
+Objectif est donc de faire deborder le buffer de 64octets pour ecraser le pointeur de fonction (adresse de m() avec l'adresse de n())
+
+On cherche la distance reel entre ces 2 allocations car ici sur la heap a la difference de la stack c'est malloc qui decide ou il va allouer et c'est pas focrement a la suite .
+On verifie avec gdb (breakpoint apres chaque allocation malloc()) on obtient 2 adresse (print adresse: print/x $eax) :
+0x0804a008 (buffer) et 0x0804a050 (pointeur de fonction) -> difference de 72 octet (pas 64 car malloc doit en utiliser 8 pour l'en-tete interne de malloc pour ca propre gestion).
+
+Commande :
+./level6 "$(python -c 'print "A"*72 + "\x54\x84\x04\x08"')"
+
+On remplis le buffer de 64 octets puis les 8 octets de reserve pour atteindre precisement l'adresse du pointeur de fonction.
+On y ecrit en little-endian l'adresse de la fonction n() (0x8048454) . Et on met des guillemet autour de $(...) pour garantier que tout est passer en un suel argument a argv[1].
+
+UNe fois executer le pointeur de fonction ecrase pointe maintenant vers n() au lieu de m() et execute system qui nous donne direct le .pass de level7.

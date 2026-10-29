@@ -1,0 +1,25 @@
+#include <stdio.h> 
+#include <string.h>
+#include <stdlib.h>
+
+char *p(void) {
+    
+    char    buffer[64];
+    void    *return_addr;
+    return_addr = __builtin_return_address(0);
+
+    fflush(stdout);
+    gets(buffer);
+    
+    if (((unsigned int)return_addr & 0xb0000000) == 0xb0000000) {        
+        printf("%p\n", return_addr);
+        exit(1);
+    }
+    puts(buffer);
+    return (strdup(buffer));
+}
+
+int main(void) {
+    p();
+    return (0);
+}

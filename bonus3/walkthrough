@@ -1,0 +1,21 @@
+Le binaire ne prend que 1 seul argument sinon return direct.
+Il ouvre ensuite en lecture seul le fichier "/home/user/end/.pass".
+On pourrais se dire que le but est d'acceder par des overflow a la variable ou est stockee cette ouverture (le pointeur de fichier)
+mais quand on regard la suite du programme il y aussi un appel a un shell sous certaine condition.
+En sachant que le binaire a la droit setuid de end cela va etre plus simple de juste remplir la condition d'acces a ce shell.
+
+Le programme commence par faire atoi() de l'argument passe .
+Puis dans un buffer a l'emplacement du resultat du atoi y met '\0'.
+Enfin on compare avec strcmp si le buffer est pareil que l'argument passe.
+On peux resoudre cela juste avec une connaissance basique que si on passe une chaine de caractere vide cela va quand meme mettre a la fin un '\0' notion de base en C.
+
+Du coup atoi("") renvoi 0 .
+Puis buff1[0] = '\0'.
+Enfin strcmp(buff1, av[1]) devient strcmp("", "")
+-> les 2 chaines sont identique renvoie 0 et rentre dans le if qui lance le shell.
+
+Execution :
+bonus3@RainFall:~$ ./bonus3 ""
+$ whoami
+end
+$ cat /home/user/end/.pass            

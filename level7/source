@@ -1,0 +1,29 @@
+#include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+char	buffer[68];
+
+struct s { int id; char *buf; };
+
+void	m() {
+	printf("%s - %d\n", buffer, time(NULL));
+}
+
+int main(int argc, char **argv) {
+	struct s *a = (struct s *)malloc(8);
+	a->id = 1;
+	a->buf = (char *)malloc(8);
+
+	struct s *c = (struct s *)malloc(8);
+	c->id = 2;
+	c->buf = (char *)malloc(8);
+
+	strcpy(a->buf, argv[1]);
+	strcpy(c->buf, argv[2]);
+
+	FILE* mdp = fopen("/home/user/level8/.pass", "r");
+	fgets(buffer, 68, mdp);
+	puts("~~");
+}

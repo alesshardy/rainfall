@@ -1,0 +1,20 @@
+La fonction main du binaire appelle une fonction v qui utilise la fonction fgets pour lire l’entrée standard, puis appelle printf pour afficher ce que l’utilisateur a écrit dans stdin.
+
+Le problème, c’est que le programme appelle printf avec le buffer directement en argument, sans chaîne de format, ce qui donne à un attaquant la possibilité de contrôler le format.
+
+python -c 'print "\x8c\x98\x04\x08" + "%x %x %46x %n"' > /tmp/exploit3
+cat /tmp/exploit3 - | ./level3
+
+La première commande crée dans un fichier l’adresse de la variable globale (sur 4 octets), puis des %x pour pousser printf à avancer sur la pile jusqu’à tomber sur l’adresse mémoire du buffer, au-delà des vrais arguments.
+
+Cela permet ensuite d’exécuter le %n pour écrire la valeur 64 à l’adresse de la variable globale, placée au début du buffer.
+
+On fait cela parce qu’un if compare la valeur de cette variable globale au nombre 64 : si la comparaison est vraie, le programme affiche un message puis ouvre un shell à l’aide de la fonction system et de son argument “/bin/sh”.
+
+La première commande étant rangée dans un fichier, il nous suffit de cat ce fichier sur l’entrée standard de level3, avec le - pour éviter que le shell ouvert ne se referme aussitôt.
+
+Puis il ne reste plus qu’à lire le fichier du mot de passe de level4 avec : cat /home/user/level4/.pass.
+
+printf aurait dû être formaté correctement : passer le buffer directement en argument peut s’avérer dangereux, comme dans notre cas. La bonne pratique est printf("%s", buffer).
+
+On écrit la commande avec python car on ne peut pas saisir l’adresse de la variable globale (4 octets bruts) sur l’entrée standard. On écrit l’adresse à l’envers (\x8c\x98\x04\x08 pour 0x0804988c) parce que le processeur est little-endian et stocke les octets du poids faible au poids fort.

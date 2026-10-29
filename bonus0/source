@@ -1,0 +1,33 @@
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+void	p(char	*dest, char	*prompt) {
+	char	buffer[4096];
+
+	puts(prompt);
+	read(0, buffer, 4096);
+	char *nl = strchr(buffer, '\n');
+	*nl = '\0';
+	strncpy(dest, buffer, 20);
+}
+
+void	pp(char	*main_buf) {
+	char	pp_buf_1[20];
+	char	pp_buf_2[20];
+
+	p(pp_buf_1, " - ");
+	p(pp_buf_2, " - ");
+
+	strcpy(main_buf, pp_buf_1);
+	strcat(main_buf, pp_buf_2);
+}
+
+int main() {
+	char	main_buf[64];
+
+	pp(main_buf);
+	puts(main_buf);
+
+	return (0);
+}

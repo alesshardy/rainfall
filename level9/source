@@ -1,0 +1,47 @@
+#include <cstring>
+#include <cstdlib>
+
+class N {
+public:
+    N(int n);
+    void setAnnotation(char *str);
+    virtual int operator+(N &right);
+    virtual int operator-(N &right);
+
+private:
+    char annotation[100];
+    int  nb;
+};
+
+N::N(int n)
+{
+    nb = n;
+}
+
+int N::operator+(N &right)
+{
+    return (nb + right.nb);
+}
+
+int N::operator-(N &right)
+{
+    return (nb - right.nb);
+}
+
+void N::setAnnotation(char *str)
+{
+    memcpy(annotation, str, strlen(str));
+}
+
+int main(int argc, char **argv)
+{
+    if (argc < 2)
+        exit(1);
+
+    N *a = new N(5);
+    N *b = new N(6);
+
+    a->setAnnotation(argv[1]);
+
+    return (*b) + (*a);
+}

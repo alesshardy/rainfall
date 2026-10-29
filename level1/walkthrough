@@ -1,0 +1,14 @@
+Pareil pour ce level, on a un binaire qui a les droits setuid du level2, avec la permission d’exécuter ce fichier pour l’utilisateur level1. Le binaire appelle la fonction gets qui lit ce qu’il y a sur l’entrée standard sans vérifier la taille.
+
+Ici on peut donc, grâce à gets, effectuer un buffer overflow pour faire exécuter la fonction run trouvée dans le binaire, que main n’appelle pas, en remplaçant l’adresse de retour de main par l’adresse de la fonction run.
+
+Cette fonction run affiche un message puis exécute la commande system avec “/bin/sh” comme argument, qui ouvre un shell avec les droits du level2, avec lequel on va pouvoir afficher le contenu du fichier .pass du level2 afin d’obtenir son mot de passe.
+
+Le buffer commence à esp+0x10 et l’adresse de retour du main est à esp+0x54, soit 68 octets de rembourrage avant de l’atteindre. Juste après, on colle l’adresse de la fonction run pour que le programme l’exécute, ce qui nous donne la commande suivante à mettre dans l’entrée standard du binaire :
+
+python -c 'print "A"*68 + "\x44\x84\x04\x08"*4' > /tmp/exploit
+cat /tmp/exploit - | ./level1
+
+On génère le payload dans un fichier avec python ... > /tmp/exploit (68 octets de rembourrage + l’adresse de run), puis cat /tmp/exploit - | ./level1 envoie ce payload au binaire : le - garde l’entrée ouverte avec le clavier après le payload, pour pouvoir taper des commandes dans le shell une fois qu’il est ouvert.
+
+Puis, dans le shell obtenu : cat /home/user/level2/.pass
